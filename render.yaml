@@ -1,9 +1,9 @@
 services:
   # A Docker web service
   - type: web
-    name: fastapi-example
+    name: PI_MLOPS_Steam
     runtime: python
     plan: free
-    autoDeploy: false
+    autoDeploy: true
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn server.main:app --host 0.0.0.0 --port $PORT
