@@ -14,17 +14,9 @@ import nltk
 
 nltk.download('vader_lexicon')
 
+
 # Crear instancia de FastAPI
-app = FastAPI()
-
-@app.get("/")
-def read_root():
-    return {"message": "¡Bienvenido a tu API personalizada con FastAPI!"}
-
-# Endpoint para redirigir a la documentación
-@app.get("/docs", include_in_schema=False)
-def custom_docs_redirect():
-    return RedirectResponse(url="/docs")
+app = FastAPI(openapi_url="/api/v1/openapi.json", docs_url="/api/v1/docs")
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 # Load the pre-trained sentiment analysis model
@@ -40,6 +32,14 @@ app.add_middleware(
 )
 sentiment_analyzer_model = SentimentIntensityAnalyzer()
 
+# Endpoint para redirigir a la documentación
+@app.get("/", include_in_schema=False)
+def read_root():
+    return {"message": "¡Bienvenido a tu API personalizada con FastAPI!"}
+
+@app.get("/docs", include_in_schema=False)
+def custom_docs_redirect():
+    return RedirectResponse(url="/api/v1/docs")
 
 # Load the pre-processed DataFrame
 df = pd.read_csv("server/data_train.csv")
