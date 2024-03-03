@@ -42,7 +42,7 @@ sentiment_analyzer_model = SentimentIntensityAnalyzer()
 
 
 # Load the pre-processed DataFrame
-df = pd.read_csv("/server/data_train.csv")
+df = pd.read_csv("server/data_train.csv")
 
 
 class SentimentAnalysisProcessor:
