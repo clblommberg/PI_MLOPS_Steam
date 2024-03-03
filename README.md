@@ -46,6 +46,11 @@ Este proyecto utiliza FastAPI y Pydantic para crear una API que ofrece análisis
    - **Endpoint:** `/developer-reviews-analysis`
    - **Descripción:** Analiza las reseñas de un desarrollador específico, contando la cantidad de reseñas positivas, negativas y neutrales.
 
+### Deploy Render
+
+[![Capturaapi.png](https://i.postimg.cc/XXM7MPQj/Capturaapi.png)](https://postimg.cc/7JVy0mFd)
+
+
 ### Consideraciones Importantes
 
 - El proyecto utiliza el modelo NLTK para el análisis de sentimientos en las reseñas de juegos.
