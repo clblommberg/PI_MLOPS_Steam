@@ -1,31 +1,34 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
+from fastapi.openapi.models import Response
+from matplotlib.axes import Axes
+
 from pydantic import BaseModel
-from typing import List, Union
+from typing import List,Optional,  Union, Tuple 
 import pandas as pd
 import numpy as np
 import json
+
 from sklearn.compose import ColumnTransformer
-
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.utils import resample
-import nltk
 
+
+import nltk
 nltk.download('vader_lexicon')
 
-
-# Crear instancia de FastAPI
 app = FastAPI(openapi_url="/api/v1/openapi.json", docs_url="/api/v1/docs")
 
 from nltk.sentiment import SentimentIntensityAnalyzer
-# Load the pre-trained sentiment analysis model
-
 from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Puedes ajustar esto según tus necesidades
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,11 +44,56 @@ def read_root():
 def custom_docs_redirect():
     return RedirectResponse(url="/api/v1/docs")
 
-# Load the pre-processed DataFrame
-df = pd.read_csv("server/data_train.csv")
+def load_processed_data(file_paths: list) -> pd.DataFrame:
+    """
+    Carga un archivo CSV preprocesado desde una lista de rutas posibles para test Local y Deploy.
 
+    Parameters:
+    - file_paths (list): Lista de rutas donde se buscará el archivo CSV.
+
+    Returns:
+    - pd.DataFrame: DataFrame cargado desde el primer archivo encontrado en las rutas.
+                    Si no se encuentra el archivo en ninguna de las rutas, devuelve un DataFrame vacío.
+
+    Example:
+    >>> file_paths = ["datasets/data_train.csv", "data_train.csv"]
+    >>> df = load_processed_data(file_paths)
+    """
+    for file_path in file_paths:
+        try:
+            df = pd.read_csv(file_path)
+            return df
+        except FileNotFoundError:
+            print(f"Archivo no encontrado en la ruta: {file_path}")
+    
+    print("Error: No se pudo cargar el archivo desde ninguna de las rutas especificadas.")
+    return pd.DataFrame()
+
+# Ejemplo de uso con ambas rutas
+file_paths = ["server/X_train.csv", "X_train.csv"]
+X_train = load_processed_data(file_paths)
+# Ejemplo de uso con ambas rutas
+file_paths2 = ["server/y_train.csv", "y_train.csv"]
+y_train = load_processed_data(file_paths2)
+
+df = pd.concat([X_train, y_train], axis=1)
 
 class SentimentAnalysisProcessor:
+    """
+    Clase para realizar análisis de sentimientos en reseñas de juegos.
+
+    Parameters:
+    - threshold_low (float): Umbral inferior para clasificar sentimientos como negativos. Valor predeterminado: -0.5.
+    - threshold_high (float): Umbral superior para clasificar sentimientos como positivos. Valor predeterminado: 0.5.
+
+    Methods:
+    - process_data(input_df: pd.DataFrame) -> pd.DataFrame:
+        Procesa un DataFrame de entrada aplicando análisis de sentimientos a las reseñas.
+
+    Example:
+    >>> sentiment_processor = SentimentAnalysisProcessor()
+    >>> output_df = sentiment_processor.process_data(df)
+    """
     def __init__(self, threshold_low=-0.5, threshold_high=0.5):
         self.threshold_low = threshold_low
         self.threshold_high = threshold_high
@@ -70,17 +118,19 @@ class SentimentAnalysisProcessor:
         df['sentiment_more_less'] = df['score_new'].apply(lambda x: 'Positive' if x == 2 else ('Negative' if x == 0 else 'Neutral'))
 
         # Eliminar las columnas 'review' y 'scores_review' si es necesario
-        columns_to_drop = ['review', 'scores_review', 'release_date', 'posted_date', 'item_name', 'sentiment_numeric']
+        columns_to_drop = ['review', 'scores_review', 'release_date', 'posted_date', 'item_name', 'sentiment_numeric', 'game_id', 'steam_id']
         df = df.drop(columns=columns_to_drop)
-        df['steam_id'] = df['steam_id'].astype('object')
-        return df_a, df
+        df['users_items_item_id'] = df['users_items_item_id'].astype('object')
+        df['user_id'] = df['user_id'].astype('object')
+        return df
 
 # Crear una instancia de la clase
 sentiment_processor = SentimentAnalysisProcessor()
 # Pasar el DataFrame a la clase para el procesamiento
-df_init, output_df = sentiment_processor.process_data(df)
+output_df = sentiment_processor.process_data(df)
 
-# Definir modelo Pydantic para la información de juego
+
+# Pydantic Información de Juego
 class GameInfo(BaseModel):
     genres_str: str
     app_name: str
@@ -90,24 +140,37 @@ class GameInfo(BaseModel):
     year: int
     recommend: int
     items_count: int
-    steam_id: int
+    user_id: int
     playtime_forever: int
     playtime_2weeks: int
     score_new: int
     sentiment_more_less: str
 
-# Definir modelos Pydantic para parámetros y resultados
+# Pydantic para parámetros y resultados desarrollador
 class DeveloperParams(BaseModel):
     dev: str
 
-# Definir modelo Pydantic para el resultado del desarrollador
 class DeveloperResult(BaseModel):
     Año: int
     Cantidad_de_Items: int
     Contenido_Free: str
-    
+
+
 # Definir función para obtener información del desarrollador
 def get_developer_info(params: DeveloperParams = Depends()):
+    """
+    Obtiene información del desarrollador sobre la cantidad de items y el contenido gratuito lanzado por año.
+
+    Parameters:
+    - params (DeveloperParams): Parámetros de entrada que incluyen el nombre del desarrollador.
+
+    Returns:
+    - List[DeveloperResult]: Lista de objetos DeveloperResult con información del desarrollador por año.
+
+    Raises:
+    - HTTPException(404): Si no se encuentra información para el desarrollador especificado.
+    - HTTPException(500): Si ocurre un error interno durante la ejecución.
+    """
     try:
         # Filtrar el DataFrame para obtener solo las filas del desarrollador especificado
         dev_df = output_df[output_df['developer'] == params.dev]
@@ -153,21 +216,34 @@ def get_developer_info(params: DeveloperParams = Depends()):
             detail=f"Error interno: {str(e)}"
         )
 
-# Agregar el nuevo endpoint a la aplicación
-@app.get("/developer-info", response_model=List[DeveloperResult])
-def get_developer_info_endpoint(result: List[DeveloperResult] = Depends(get_developer_info)):
+
+@app.get("/developer-items-data", response_model=List[DeveloperResult])
+def get_developer_info_endpoint(
+    dev: str = "Valve",  # Puedes probar con diferentes valores cambiando este parámetro
+    result: List[DeveloperResult] = Depends(get_developer_info)
+):
+    """
+    Endpoint para obtener información del desarrollador sobre la cantidad de items y el contenido gratuito lanzado por año.
+
+    Parameters:
+    - dev (str): Nombre del desarrollador del cual se busca la información (por defecto es "Valve").
+
+    Returns:
+    - List[DeveloperResult]: Lista de objetos DeveloperResult con información del desarrollador por año.
+    """
     return result
 
-# Definir modelo Pydantic para las estadísticas de usuario
+
+# Pydantic Estadísticas de usuario
 class UserStats(BaseModel):
     Usuario: str
     Dinero_gastado: str
     Porcentaje_recomendacion: str
     Cantidad_items: int
 
-# Definir modelo Pydantic para parámetros de SteamId
+# Pydantic Parámetros de SteamId
 class SteamIdParams(BaseModel):
-    steam_id: str
+    user_id: str
 
 def convert_to_python_types(record):
     record_dict = record.to_dict(orient='records')[0]
@@ -182,11 +258,24 @@ def convert_to_python_types(record):
     
     return record_dict
 
-# Definir función para obtener estadísticas de usuario
+
 def get_user_stats(params: SteamIdParams = Depends()):
+    """
+    Obtiene estadísticas del usuario de Steam, incluyendo dinero gastado, porcentaje de recomendación y cantidad de items.
+
+    Parameters:
+    - params (SteamIdParams): Parámetros de entrada que incluyen el identificador único del usuario de Steam.
+
+    Returns:
+    - UserStats: Objeto UserStats con estadísticas del usuario.
+
+    Raises:
+    - HTTPException(404): Si no se encuentran datos para el usuario especificado.
+    - HTTPException(500): Si ocurre un error interno durante la ejecución.
+    """
     try:
-        # Convertir 'params.steam_id' a cadena para asegurar la comparación
-        user_df = output_df[output_df['steam_id'].astype(str) == params.steam_id]
+        # Convertir 'params.user_id' a cadena para asegurar la comparación
+        user_df = output_df[output_df['user_id'].astype(str) == params.user_id]
 
         # Verificar si hay datos para el usuario
         if user_df.empty:
@@ -209,7 +298,7 @@ def get_user_stats(params: SteamIdParams = Depends()):
 
         # Crear y devolver el objeto Pydantic con la información
         return UserStats(
-            Usuario=params.steam_id,
+            Usuario=params.user_id,
             Dinero_gastado='${:.2f} USD'.format(money_spent),
             Porcentaje_recomendacion=pct_recommended_str,
             Cantidad_items=total_items,
@@ -219,9 +308,20 @@ def get_user_stats(params: SteamIdParams = Depends()):
         # Manejar cualquier excepción y devolver una respuesta de error
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-
-@app.get("/user-stats/{steam_id:str}", response_model=UserStats)
+# 76561197971591953	Counter-Strike
+@app.get("/user-data-stats/{user_id:str}", response_model=UserStats)
 def get_user_stats_endpoint(stats: UserStats = Depends(get_user_stats)):
+    """
+    Obtiene estadísticas del usuario através del Id Steam.
+    Supuesto el usuario  genera cambios de id_usuario constamente pero el id_steam se mantiene.
+
+    Parameters:
+    - user_id (str): Identificador Steam del usuario del cual se busca la información SPACEgamer.
+
+    Returns:
+    - List[DeveloperResult]: Lista con información sobre la cantidad de dinero gastado por el 
+    usuario, el porcentaje de recomendación en base a recommend y cantidad de items.
+    """
     return stats
 
 
@@ -229,18 +329,20 @@ def get_user_stats_endpoint(stats: UserStats = Depends(get_user_stats)):
 class GenreParams(BaseModel):
     genre: str
 
-# Definir función para el nuevo endpoint
 def get_user_playtime_by_genre(params: GenreParams = Depends()):
     try:
+        # Convertir el género ingresado a minúsculas y sin espacios
+        normalized_genre = params.genre.lower().replace(" ", "")
+
         # Filtrar el DataFrame para el género específico
-        genre_df = output_df[output_df['genres_str'] == params.genre].copy()
+        genre_df = output_df[output_df['genres_str'].str.lower().str.replace(" ", "") == normalized_genre].copy()
 
         # Verificar si hay datos para el género
         if genre_df.empty:
             raise HTTPException(status_code=404, detail=f"No se encontraron datos para el género {params.genre}.")
 
         # Encontrar el usuario con más horas jugadas
-        max_playtime_user = genre_df.loc[genre_df['playtime_forever'].idxmax()]['steam_id']
+        max_playtime_user = genre_df.loc[genre_df['playtime_forever'].idxmax()]['user_id']
 
         # Convertir las horas de minutos a horas y redondear a números enteros
         genre_df['playtime_hours'] = genre_df['playtime_forever'] // 60
@@ -262,6 +364,15 @@ def get_user_playtime_by_genre(params: GenreParams = Depends()):
 # Agregar el nuevo endpoint a la aplicación
 @app.get("/user-playtime-by-genre", response_model=dict)
 def user_playtime_by_genre_endpoint(result: dict = Depends(get_user_playtime_by_genre)):
+    """
+    Obtiene estadísticas de horas jugadas por género de juego a través de un endpoint API.
+
+    Parameters:
+    - result (dict): Resultado obtenido mediante la función get_user_playtime_by_genre = simulation.
+
+    Returns:
+    - dict: Diccionario con información sobre el usuario con más horas jugadas para el género y la acumulación de horas jugadas por año.
+    """
     return result
 
 
@@ -301,6 +412,15 @@ def get_top_developers_by_year(params: YearParams = Depends()):
 # Agregar el nuevo endpoint a la aplicación
 @app.get("/top-developers-by-year", response_model=List[dict])
 def top_developers_by_year_endpoint(result: List[dict] = Depends(get_top_developers_by_year)):
+    """
+    Obtiene estadísticas de los principales desarrolladores por la cantidad de juegos recomendados para un año específico a través de un endpoint API.
+
+    Parameters:
+    - result (List[dict]): Resultado obtenido mediante la función get_top_developers_by_year : Rango 1998 entre 2017.
+
+    Returns:
+    - List[dict]: Lista de diccionarios con información sobre los principales desarrolladores y la cantidad de juegos recomendados.
+    """
     return result
 
 
@@ -339,4 +459,212 @@ def get_developer_reviews_analysis(params: DeveloperParams = Depends()):
 # Agregar el nuevo endpoint a la aplicación
 @app.get("/developer-reviews-analysis", response_model=Union[dict, List[dict]])
 def developer_reviews_analysis_endpoint(result: Union[dict, List[dict]] = Depends(get_developer_reviews_analysis)):
+    """
+    Obtiene estadísticas del análisis de reseñas para un desarrollador específico a través de un endpoint API.
+
+    Parameters:
+    - result (Union[dict, List[dict]]): Resultado obtenido mediante la función get_developer_reviews_analysis: Valve.
+
+    Returns:
+    - Union[dict, List[dict]]: Diccionario o lista de diccionarios con información sobre las reseñas positivas, negativas y neutrales del desarrollador.
+    """
     return result
+
+class MultiColumnLabelEncoder(BaseEstimator, TransformerMixin):
+    def __init__(self, columns=None):
+        self.columns = columns
+        self.label_encoders = {}
+
+    def fit(self, X, y=None):
+        for col in self.columns:
+            le = LabelEncoder()
+            le.fit(X[col])
+            self.label_encoders[col] = le
+        return self
+
+    def transform(self, X):
+        for col in self.columns:
+            le = self.label_encoders[col]
+            X.loc[:, col] = le.transform(X[col])
+        return X
+
+class CustomPreprocessor(BaseEstimator, TransformerMixin):
+    def __init__(self):
+        self.numeric_columns = []
+        self.ordinal_columns = []
+        self.categorical_columns = []
+
+    def fit(self, X, y=None):
+        # Obtener las columnas numéricas, ordinales y categóricas
+        self.numeric_columns = X.select_dtypes(include=['int64', 'float64', 'int32']).columns
+        self.ordinal_columns = ['recommend']  # Puedes añadir aquí tus columnas ordinales
+        self.categorical_columns = X.select_dtypes(include=['object']).columns
+        return self
+
+    def transform(self, X):
+        # Crear una nueva variable excluyendo las columnas ordinales
+        categorical_col_excluded_ordinal = [col for col in self.categorical_columns if col not in self.ordinal_columns]
+        numeric_col_excluded_ordinal = [col for col in self.numeric_columns if col not in self.ordinal_columns]
+
+        # Convertir las columnas categóricas a tipo str
+        X.loc[:, categorical_col_excluded_ordinal] = X[categorical_col_excluded_ordinal].astype(str)
+
+        # Definir las transformaciones para las columnas numéricas
+        numeric_transformer = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='mean')),
+            ('scaler', StandardScaler())
+        ])
+
+        # Definir las transformaciones para las columnas ordinales
+        ordinal_transformer = MultiColumnLabelEncoder(columns=self.ordinal_columns)
+
+        # Aplicar las transformaciones
+        transformed_data = numeric_transformer.fit_transform(X[numeric_col_excluded_ordinal])
+        transformed_data = np.concatenate([transformed_data, ordinal_transformer.fit_transform(X[self.ordinal_columns])], axis=1)
+
+        # Obtener los nombres de las columnas después de la transformación
+        numeric_feature_names = numeric_transformer.named_steps['scaler'].get_feature_names_out(input_features=numeric_col_excluded_ordinal)
+        ordinal_feature_names = self.ordinal_columns
+        column_names = np.concatenate([numeric_feature_names, ordinal_feature_names])
+
+        return transformed_data, column_names
+    
+def process_dataframe(input_df: pd.DataFrame, columns_to_drop: list) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    # Create an instance of the class
+    label_processor = MultiColumnLabelEncoder() 
+    custom_processor = CustomPreprocessor()
+
+    # Drop specified columns
+    processed_df = input_df.drop(columns=columns_to_drop)
+
+    # Apply the pipeline to the DataFrame
+    transformed_data, column_names = custom_processor.fit_transform(processed_df)
+
+    return processed_df, pd.DataFrame(transformed_data, columns=column_names)
+
+# Example usage
+columns_to_drop = ['app_name', 'developer', 'user_id','user_reviews_item_id', 'users_items_item_id','sentiment_more_less']
+processed_df, transformed_df = process_dataframe(output_df, columns_to_drop)
+
+
+def calculate_similarity_matrix(df):
+    # Seleccionar solo las columnas numéricas para el cálculo de similitud
+    numeric_columns = df.select_dtypes(include=[np.number]).columns
+    df_numeric = df[numeric_columns]
+
+    # Calcular la matriz de similitud coseno
+    similarity_matrix = cosine_similarity(df_numeric)
+
+    return similarity_matrix
+
+# Ejemplo de uso con tu DataFrame
+output_df_ml = pd.concat([output_df.loc[:, ['users_items_item_id', 'app_name']], transformed_df], axis=1)
+modelo_item_id = output_df_ml.groupby(["users_items_item_id", "app_name"]).sum().reset_index()
+# Llamar a la función con el DataFrame con índices personalizados
+#similarity_matrix = calculate_similarity_matrix(modelo_item_id)
+
+similarity_matrix = cosine_similarity(modelo_item_id.select_dtypes(include=[np.number]))
+
+
+class SimilarGamesRequest(BaseModel):
+    reference_item_id: int
+    num_similar_games: int
+
+class SimilarGamesResponse(BaseModel):
+    similar_games: List[str]
+
+@app.post("/similar_item_id", response_model=SimilarGamesResponse)
+def get_similar_games(request: SimilarGamesRequest):
+    """
+    Obtiene juegos similares basados en el índice de referencia y el número de juegos similares solicitados.
+
+    Parameters:
+    - request (SimilarGamesRequest): Parámetros de entrada que incluyen el índice de referencia y el número de juegos similares.
+    - "reference_index": 10,      # hace referencia al Juego Counter-Strike
+    - "num_similar_games": 5      # puedes solicitar en número diferentes juegos del sistema de recomendación.
+    Returns:
+    - SimilarGamesResponse: Respuesta que contiene la lista de nombres de juegos similares.
+    
+    Raises:
+    - HTTPException(404): Si el índice de referencia no es válido.
+    - HTTPException(500): Si ocurre un error interno durante la ejecución.
+    """
+    try:
+        # Buscar el índice correspondiente al users_items_item_id en el DataFrame
+        reference_index = modelo_item_id[modelo_item_id['users_items_item_id'] == request.reference_item_id].index[0]
+        
+        # Obtener las puntuaciones de similitud para el juego de referencia
+        similarity_scores = similarity_matrix[reference_index]
+
+        # Obtener los índices ordenados por similitud
+        sorted_indices = similarity_scores.argsort()[::-1]
+
+        # Obtener los índices de juegos similares (excluyendo el juego de referencia)
+        similar_games_indices = sorted_indices[1:request.num_similar_games + 1]
+
+        # Obtener los nombres de juegos similares
+        similar_games = modelo_item_id['app_name'].iloc[similar_games_indices]
+
+        return SimilarGamesResponse(similar_games=similar_games.tolist())
+
+    except IndexError:
+        # Manejar el caso en el que no se encuentra el juego de referencia
+        raise HTTPException(status_code=404, detail=f"Juego de referencia con ID {request.reference_item_id} no encontrado")
+
+
+
+def calculate_similarity_matrix(df):
+    numeric_columns = df.select_dtypes(include=[np.number]).columns
+    df_numeric = df[numeric_columns]
+    similarity_matrix = cosine_similarity(df_numeric)
+    return similarity_matrix
+
+output_df_ml_2 = pd.concat([output_df.loc[:, ['user_id', 'app_name']], transformed_df], axis=1)
+modelo_id_steam = output_df_ml_2.groupby(["user_id", "app_name"]).sum().reset_index()
+similarity_matrix_steam = calculate_similarity_matrix(modelo_id_steam)
+
+class SimilarGamesRequestNewName(BaseModel):
+    reference_index: Union[str, int]
+    num_similar_games: int
+
+class SimilarGamesResponseNewName(BaseModel):
+    similar_games: List[str]
+
+def get_similar_games_new_name(request: SimilarGamesRequestNewName, similarity_matrix: np.ndarray, modelo_id_steam: pd.DataFrame) -> SimilarGamesResponseNewName:
+    str_reference_index = str(request.reference_index)
+    matching_rows = modelo_id_steam[
+        modelo_id_steam['user_id'].astype(str).str.lower() == str_reference_index.lower()
+    ]
+
+    if matching_rows.empty:
+        return SimilarGamesResponseNewName(similar_games=[])
+
+    reference_index = matching_rows.index[0]
+    similarity_scores = similarity_matrix[reference_index]
+    sorted_indices = similarity_scores.argsort()[::-1]
+    similar_games_indices = sorted_indices[1:request.num_similar_games + 1]
+    similar_games = modelo_id_steam['app_name'].iloc[similar_games_indices]
+
+    return SimilarGamesResponseNewName(similar_games=similar_games.to_list())
+
+@app.post("/get_similar_games")
+async def get_similar_games_endpoint(request: SimilarGamesRequestNewName):
+    """
+    Obtiene juegos similares basados en el índice o User ID de referencia y el número de juegos similares solicitados.
+
+    Parameters:
+    - request (SimilarGamesRequest): Parámetros de entrada que incluyen el índice o User ID de referencia y el número de juegos similares.
+    - "reference_index": "SPACEgamer",      # hace referencia al Identificador Steam de cada usuario
+    - "num_similar_games": 5                       # puedes solicitar en número diferentes juegos del sistema de recomendación
+    Returns:
+    - SimilarGamesResponse: Respuesta que contiene la lista de nombres de juegos similares.
+    
+    Raises:
+    - HTTPException(404): Si el User ID de referencia no se encuentra en la base de datos.
+    - HTTPException(500): Si ocurre un error interno durante la ejecución.
+    """
+    try:
+        result = get_similar_games_new_name(request, similarity_matrix_steam, modelo_id_steam)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
