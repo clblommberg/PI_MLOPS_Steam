@@ -46,39 +46,9 @@ def read_root():
 def custom_docs_redirect():
     return RedirectResponse(url="/api/v1/docs")
 
-def load_processed_data(file_paths: list) -> pd.DataFrame:
-    """
-    Carga un archivo CSV preprocesado desde una lista de rutas posibles para test Local y Deploy.
 
-    Parameters:
-    - file_paths (list): Lista de rutas donde se buscará el archivo CSV.
 
-    Returns:
-    - pd.DataFrame: DataFrame cargado desde el primer archivo encontrado en las rutas.
-                    Si no se encuentra el archivo en ninguna de las rutas, devuelve un DataFrame vacío.
-
-    Example:
-    >>> file_paths = ["datasets/data_train.csv", "data_train.csv"]
-    >>> df = load_processed_data(file_paths)
-    """
-    for file_path in file_paths:
-        try:
-            df = pd.read_csv(file_path)
-            return df
-        except FileNotFoundError:
-            print(f"Archivo no encontrado en la ruta: {file_path}")
-    
-    print("Error: No se pudo cargar el archivo desde ninguna de las rutas especificadas.")
-    return pd.DataFrame()
-
-# Ejemplo de uso con ambas rutas
-file_paths = ["server/X_train.csv", "X_train.csv"]
-X_train = load_processed_data(file_paths)
-# Ejemplo de uso con ambas rutas
-file_paths2 = ["server/y_train.csv", "y_train.csv"]
-y_train = load_processed_data(file_paths2)
-
-df = pd.concat([X_train, y_train], axis=1)
+df = pd.read_csv('server/data_train.csv')
 
 class SentimentAnalysisProcessor:
     """
