@@ -7,7 +7,7 @@
 Este proyecto utiliza FastAPI y Pydantic para crear una API que ofrece análisis y recomendaciones relacionadas con juegos de Steam. El proyecto se enfoca en el procesamiento y análisis de datos, abordando áreas como análisis de sentimientos en reseñas, estadísticas de usuarios, información de desarrolladores y más.
 
 - Accede a Deploy del Proyecto:
-[Web API](https://pi-mlops-steam-3u6q.onrender.com/api/v1/docs)
+[Web API](https://pi-mlops-steam-ajwr.onrender.com/api/v1/docs)
 
 ### Estructura del Proyecto
 
