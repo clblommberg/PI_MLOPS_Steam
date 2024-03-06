@@ -288,7 +288,7 @@ def get_user_stats_endpoint(stats: UserStats = Depends(get_user_stats)):
     Supuesto el usuario  genera cambios de id_usuario constamente pero el id_steam se mantiene.
 
     Parameters:
-    - user_id (str): Identificador Steam del usuario del cual se busca la información SPACEgamer.
+    - user_id (str): Identificador Steam del usuario del cual se busca la información chidvd.
 
     Returns:
     - List[DeveloperResult]: Lista con información sobre la cantidad de dinero gastado por el 
@@ -626,7 +626,7 @@ async def get_similar_games_endpoint(request: SimilarGamesRequestNewName):
 
     Parameters:
     - request (SimilarGamesRequest): Parámetros de entrada que incluyen el índice o User ID de referencia y el número de juegos similares.
-    - "reference_index": "SPACEgamer",      # hace referencia al Identificador Steam de cada usuario
+    - "reference_index": "DarthRhys",      # hace referencia al Identificador Steam de cada usuario
     - "num_similar_games": 5                       # puedes solicitar en número diferentes juegos del sistema de recomendación
     Returns:
     - SimilarGamesResponse: Respuesta que contiene la lista de nombres de juegos similares.
