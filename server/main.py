@@ -48,7 +48,7 @@ def custom_docs_redirect():
 
 
 
-df = pd.read_csv('data_train.csv')
+df = pd.read_csv('server/data_train.csv')
 
 class SentimentAnalysisProcessor:
     """

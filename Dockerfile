@@ -12,8 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia solo los archivos necesarios desde el directorio local (main.py y data_train.csv) al contenedor
 COPY server/main.py .
-COPY server/X_train.csv .
-COPY server/y_train.csv .
+COPY server/data_train.csv .
+
 
 # Comando para ejecutar tu aplicación
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$PORT"]
