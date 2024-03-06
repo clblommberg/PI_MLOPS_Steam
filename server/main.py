@@ -17,10 +17,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.metrics.pairwise import cosine_similarity
 
-
 import nltk
-nltk.download('vader_lexicon')
 
+if not nltk.data.find('vader_lexicon'):
+    nltk.download('vader_lexicon')
 
 app = FastAPI(
     title="Sistema de Recomendación e Insights Steam",
