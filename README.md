@@ -8,6 +8,8 @@ Este proyecto utiliza FastAPI y Pydantic para crear una API que ofrece análisis
 
 - Accede a Deploy del Proyecto:
 [Web API](https://pi-mlops-steam-ajwr.onrender.com/api/v1/docs)
+- Sustentación de Proyecto:
+[Vídeo YouTube](https://www.youtube.com/watch?v=ZQWwrQ-q_Gw)
 
 ### Estructura del Proyecto
 
