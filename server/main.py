@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
 from fastapi.responses import RedirectResponse
 from fastapi.openapi.models import Response
-from matplotlib.axes import Axes
+
 
 from pydantic import BaseModel
 from typing import List,Optional,  Union, Tuple 
@@ -21,7 +21,13 @@ from sklearn.metrics.pairwise import cosine_similarity
 import nltk
 nltk.download('vader_lexicon')
 
-app = FastAPI(openapi_url="/api/v1/openapi.json", docs_url="/api/v1/docs")
+
+app = FastAPI(
+    title="Sistema de Recomendación e Insights Steam",
+    description="API para acceder a las funcionalidades del Sistema de Recomendación e Insights de Steam.",
+    openapi_url="/api/v1/openapi.json",
+    docs_url="/api/v1/docs"
+)
 
 from nltk.sentiment import SentimentIntensityAnalyzer
 from fastapi.middleware.cors import CORSMiddleware
